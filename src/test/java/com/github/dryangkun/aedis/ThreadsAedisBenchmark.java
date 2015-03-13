@@ -25,7 +25,7 @@ public class ThreadsAedisBenchmark {
         AedisBootstrap bootstrap = new AedisBootstrap(new NioEventLoopGroup());
         bootstrap.setHostAndPort("localhost", 6379)
                 .setTimeout_ms(10000)
-                .setCommand_queue_size(Integer.MAX_VALUE);
+                .setCommand_queue_size(65535 * 4);
 
         final AedisGroup aedis = bootstrap.newAedisGroup(80);
         final int threads = 4;

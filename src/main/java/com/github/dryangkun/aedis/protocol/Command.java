@@ -40,6 +40,7 @@ public class Command<A extends Output> {
     private int argsByteSize;
 
     private volatile Object result = null;
+    private LinkedBlockingQueue<Command> queue;
 
     public Command() {
         type = null;
@@ -134,6 +135,14 @@ public class Command<A extends Output> {
 
     public int getByteBufCapacity() {
         return 1 + getIntStrLength(argsList.size()) + 2 + argsByteSize + 5 * argsList.size();
+    }
+
+    public void setQueue(LinkedBlockingQueue<Command> queue) {
+        this.queue = queue;
+    }
+
+    public boolean offerCommand() {
+        return queue.offer(this);
     }
 
     public A get() {
