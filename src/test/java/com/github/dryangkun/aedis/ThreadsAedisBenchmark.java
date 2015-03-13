@@ -3,9 +3,6 @@ package com.github.dryangkun.aedis;
 import com.github.dryangkun.aedis.protocol.Command;
 import com.github.dryangkun.aedis.protocol.CommandListener;
 import com.github.dryangkun.aedis.protocol.output.ByteArrayOutput;
-import com.github.dryangkun.aedis.protocol.output.MapOutput;
-import com.github.dryangkun.aedis.protocol.output.StatusOutput;
-import io.netty.channel.nio.NioEventLoop;
 import io.netty.channel.nio.NioEventLoopGroup;
 
 import java.util.Arrays;
@@ -25,9 +22,10 @@ public class ThreadsAedisBenchmark {
         AedisBootstrap bootstrap = new AedisBootstrap(new NioEventLoopGroup());
         bootstrap.setHostAndPort("localhost", 6379)
                 .setTimeout_ms(10000)
-                .setCommand_queue_size(65535 * 4);
+                .setCommand_queue_capacity(65535 * 4);
 
         final AedisGroup aedis = bootstrap.newAedisGroup(80);
+        System.out.println("start");
         final int threads = 4;
         final int count = 500000;
 
@@ -113,6 +111,7 @@ public class ThreadsAedisBenchmark {
         System.out.println("queuefull : " + queuefullIncrement.get());
 
         aedis.close();
+        System.out.println("close");
         bootstrap.getGroup().shutdownGracefully();
         System.out.println("quit");
     }

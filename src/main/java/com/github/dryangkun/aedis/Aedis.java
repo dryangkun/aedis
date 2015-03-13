@@ -3,7 +3,6 @@ package com.github.dryangkun.aedis;
 import com.github.dryangkun.aedis.protocol.*;
 import com.github.dryangkun.aedis.protocol.output.*;
 import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.util.internal.logging.InternalLogger;
@@ -13,8 +12,6 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Created by dryangkun on 15/3/1.
@@ -28,29 +25,30 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
             final Channel channel = future.channel();
-            if (!closed()) channel.eventLoop().schedule(new Runnable() {
-                @Override
-                public void run() {
-                    LOG.debug("reconnect - " + channel);
-                    connect();
-                }
-            }, options.getReconnect_interval_ms(), TimeUnit.MILLISECONDS);
+            if (!closed()) {
+                channel.eventLoop().schedule(new Runnable() {
+                    @Override
+                    public void run() {
+                        LOG.info("reconnecting - " + channel);
+                        reconnect();
+                        LOG.info("reconnected - " + channel);
+                    }
+                }, options.getReconnect_interval_ms(), TimeUnit.MILLISECONDS);
+            }
         }
     }
 
     private final Bootstrap bootstrap;
     private final AedisBootstrap.Options options;
-    private final LinkedBlockingQueue<Command> queue;
-    private final Lock wlock = new ReentrantLock();
 
     private volatile boolean closed = false;
     private volatile  Channel channel;
     private CountDownLatch connectLatch;
 
-    public Aedis(Bootstrap bootstrap, AedisBootstrap.Options options) {
+    public Aedis(Bootstrap bootstrap, final AedisBootstrap.Options options) {
         this.bootstrap = bootstrap;
         this.options = options;
-        this.queue = new LinkedBlockingQueue<Command>(options.getCommand_queue_size());
+        final int capacity = options.getCommand_queue_capacity();
 
         this.bootstrap.remoteAddress(options.getHost(), options.getPort())
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, options.getConnect_timeout_ms())
@@ -58,7 +56,8 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
                     @Override
                     protected void initChannel(SocketChannel ch) throws Exception {
                         ChannelPipeline pipeline = ch.pipeline();
-                        pipeline.addLast(Aedis.this, new CommandHandler(queue));
+                        pipeline.addLast(Aedis.this);
+                        pipeline.addLast("handler", new CommandHandler(capacity));
                     }
                 });
     }
@@ -80,8 +79,29 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
                         //ignore
                     }
                 } catch (Throwable e) {
-                    LOG.error("connect fail", e);
+                    LOG.error("connect fail - " + e.getMessage());
+                } finally {
+                    connectLatch = null;
                 }
+            }
+        }
+    }
+
+    private void reconnect() {
+        if (!closed()) synchronized (this) {
+            if (!closed()) {
+                connectLatch = null;
+                ChannelFuture future = bootstrap.connect();
+                future.addListener(new ChannelFutureListener() {
+                    @Override
+                    public void operationComplete(ChannelFuture future) throws Exception {
+                        if (!future.isSuccess()) {
+                            Throwable e = future.cause();
+                            LOG.error("reconnect fail - " + e.getMessage());
+                        }
+                    }
+                });
+                future.channel().closeFuture().addListener(new Reconnect());
             }
         }
     }
@@ -108,97 +128,58 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
     }
 
     public void dispatch(final List<Command> commands) {
-        boolean inactive = true;
-        if (channel != null) {
-            boolean trylock = false;
-            try {
-                trylock = wlock.tryLock(options.getTimeout_ms(), TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                //ignore
-            }
+        final Channel channel = this.channel;
+        if (channel != null && channel.isActive()) {
+            boolean flushed = false;
+            ChannelPipeline pipeline = channel.pipeline();
+            CommandHandler handler = (CommandHandler) pipeline.get("handler");
 
-            if (trylock) {
-                if (channel != null && channel.isActive()) {
-                    inactive = false;
-                    boolean flushed = false;
-                    for (Command command : commands) {
-                        if (queue.offer(command)) {
-                            ByteBuf buf = channel.alloc().buffer(command.getByteBufCapacity());
-                            command.encode(buf);
-                            channel.writeAndFlush(buf, channel.voidPromise());
-                            flushed = true;
-                        }
-                        else {
-                            command.tryQueuefull();
+            for (Command command : commands) {
+                if (handler.write(command, options.getTimeout_ms())) {
+                    flushed = true;
+                }
+            }
+            if (flushed) {
+                channel.eventLoop().schedule(new Runnable() {
+                    @Override
+                    public void run() {
+                        for (Command command : commands) {
+                            command.tryTimeout();
                         }
                     }
-
-                    if (flushed) {
-                        channel.flush();
-                        channel.eventLoop().schedule(new Runnable() {
-                            @Override
-                            public void run() {
-                                for (Command command : commands) {
-                                    command.tryTimeout();
-                                }
-                            }
-                        }, options.getTimeout_ms(), TimeUnit.MILLISECONDS);
-                    }
-                }
-                wlock.unlock();
-            }
-            else {
-                for (Command command : commands) {
-                    command.tryTimeout();
-                }
+                }, options.getTimeout_ms(), TimeUnit.MILLISECONDS);
+                handler.trigger(pipeline);
             }
         }
-        if (inactive)
+        else {
             for (Command command : commands) {
                 command.tryInactive();
             }
+        }
     }
 
     @Override
     public void dispatch(final Command command) {
-        boolean inactive = true;
-        if (channel != null) {
-            boolean trylock = false;
-            try {
-                trylock = wlock.tryLock(options.getTimeout_ms(), TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                //ignore
-            }
-
-            if (trylock) {
-                if (channel != null && channel.isActive()) {
-                    inactive = false;
-                    dispatch0(command, channel);
-                }
-                wlock.unlock();
-            }
-            else {
-                command.tryTimeout();
-            }
+        final Channel channel = this.channel;
+        if (channel != null && channel.isActive()) {
+            dispatch0(command, channel);
         }
-        if (inactive)
+        else {
             command.tryInactive();
+        }
     }
 
     private void dispatch0(final Command command, final Channel channel) {
-        if (queue.offer(command)) {
-            ByteBuf buf = channel.alloc().buffer(command.getByteBufCapacity());
-            command.encode(buf);
-            channel.writeAndFlush(buf, channel.voidPromise());
+        ChannelPipeline pipeline = channel.pipeline();
+        CommandHandler handler = (CommandHandler) pipeline.get("handler");
+        if (handler.write(command, options.getTimeout_ms())) {
             channel.eventLoop().schedule(new Runnable() {
                 @Override
                 public void run() {
                     command.tryTimeout();
                 }
             }, options.getTimeout_ms(), TimeUnit.MILLISECONDS);
-        }
-        else {
-            command.tryQueuefull();
+            handler.trigger(pipeline);
         }
     }
 
@@ -219,19 +200,14 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
 
     @Override
     public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
-        wlock.lock();
-        Command command;
-        while ((command = queue.poll()) != null) {
-            command.tryInactive();
-        }
-        wlock.unlock();
+        ctx.fireChannelUnregistered();
     }
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        ctx.fireChannelActive();
         String auth = options.getAuth();
         final Channel channel = ctx.channel();
-        wlock.lock();
         if (auth != null && auth.length() > 0) {
             Command<StatusOutput> command = new Command<StatusOutput>(CommandType.AUTH, new CommandListener<StatusOutput>() {
                 @Override
@@ -247,31 +223,27 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
                         }
                     }
 
-                    wlock.lock();
                     if (success) {
                         Aedis.this.channel = channel;
                     }
                     else {
                         channel.close();
                     }
-                    connectLatch.countDown();
-                    wlock.unlock();
+                    if (connectLatch != null) connectLatch.countDown();
                 }
             }, new StatusOutput(), auth.getBytes());
             dispatch0(command, channel);
         }
         else {
             this.channel = channel;
-            connectLatch.countDown();
+            if (connectLatch != null) connectLatch.countDown();
         }
-        wlock.unlock();
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        wlock.lock();
         channel = null;
-        wlock.unlock();
+        ctx.fireChannelInactive();
     }
 
     @Override
@@ -296,7 +268,7 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        LOG.error("exceptionCaught", cause);
+        LOG.error("exceptionCaught - " + cause.getMessage());
         ctx.close();
     }
 

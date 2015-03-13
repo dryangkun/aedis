@@ -28,7 +28,7 @@ public class AedisBootstrap {
         private int connect_timeout_ms = DEFAULT_CONNECT_TIMEOUT_MS;
         private int reconnect_interval_ms = DEFAULT_RECONNECT_INTERVAL_MS;
 
-        private int command_queue_size = DEFAULT_COMMAND_QUEUE_SIZE;
+        private int command_queue_capacity = DEFAULT_COMMAND_QUEUE_SIZE;
 
         public Options() {}
 
@@ -65,8 +65,8 @@ public class AedisBootstrap {
             return reconnect_interval_ms;
         }
 
-        public int getCommand_queue_size() {
-            return command_queue_size;
+        public int getCommand_queue_capacity() {
+            return command_queue_capacity;
         }
 
         @Override
@@ -144,8 +144,8 @@ public class AedisBootstrap {
         return this;
     }
 
-    public AedisBootstrap setCommand_queue_size(int command_queue_size) {
-        options.command_queue_size = command_queue_size;
+    public AedisBootstrap setCommand_queue_capacity(int command_queue_capacity) {
+        options.command_queue_capacity = command_queue_capacity;
         return this;
     }
 
