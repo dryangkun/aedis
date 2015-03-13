@@ -3,6 +3,7 @@ package com.github.dryangkun.aedis;
 import com.github.dryangkun.aedis.protocol.Command;
 import com.github.dryangkun.aedis.protocol.CommandListener;
 import com.github.dryangkun.aedis.protocol.output.*;
+import io.netty.util.CharsetUtil;
 
 import java.util.Map;
 
@@ -138,7 +139,7 @@ public abstract class AedisBase implements IAedis {
     @Override
     public void expireat(CommandListener<BooleanOutput> listener, byte[] key, long timestamp) {
         Command<BooleanOutput> command = new Command<BooleanOutput>(
-                EXISTS, listener, new BooleanOutput(), 2);
+                EXPIREAT, listener, new BooleanOutput(), 2);
         command.addArg(key).addArg(timestamp);
         dispatch(command);
     }
@@ -161,7 +162,7 @@ public abstract class AedisBase implements IAedis {
     @Override
     public void getrange(CommandListener<ByteArrayOutput> listener, byte[] key, long start, long end) {
         Command<ByteArrayOutput> command = new Command<ByteArrayOutput>(
-                GET, listener, new ByteArrayOutput(), 3);
+                GETRANGE, listener, new ByteArrayOutput(), 3);
         command.addArg(key).addArg(start).addArg(end);
         dispatch(command);
     }
@@ -284,7 +285,7 @@ public abstract class AedisBase implements IAedis {
 
     @Override
     public void keys(CommandListener<ListOutput> listener, String pattern) {
-        Command<ListOutput> command  = new Command<ListOutput>(KEYS, listener, new ListOutput(), pattern.getBytes(Charsets.ASCII));
+        Command<ListOutput> command  = new Command<ListOutput>(KEYS, listener, new ListOutput(), pattern.getBytes(CharsetUtil.US_ASCII));
         dispatch(command);
     }
 

@@ -2,7 +2,7 @@
 
 package com.github.dryangkun.aedis.protocol;
 
-import com.github.dryangkun.aedis.Charsets;
+import io.netty.util.CharsetUtil;
 
 /**
  * Keyword modifiers for redis commands.
@@ -18,6 +18,6 @@ public enum CommandKeyword {
     public byte[] bytes;
 
     private CommandKeyword() {
-        bytes = name().getBytes(Charsets.ASCII);
+        bytes = name().getBytes(CharsetUtil.US_ASCII);
     }
 }

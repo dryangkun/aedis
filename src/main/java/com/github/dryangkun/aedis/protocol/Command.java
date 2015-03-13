@@ -1,9 +1,8 @@
 package com.github.dryangkun.aedis.protocol;
 
-import com.github.dryangkun.aedis.Charsets;
 import com.github.dryangkun.aedis.protocol.output.Output;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
+import io.netty.util.CharsetUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
@@ -30,7 +29,7 @@ public class Command<A extends Output> {
     private static final Throwable INACTIVE = new Throwable("inactive");
     private static final Throwable QUEUEFULL = new Throwable("queuefull");
 
-    private static final byte[] CRLF = "\r\n".getBytes(Charsets.ASCII);
+    private static final byte[] CRLF = "\r\n".getBytes(CharsetUtil.US_ASCII);
 
     private final CommandType type;
     private final CommandListener<A> listener;
@@ -76,7 +75,7 @@ public class Command<A extends Output> {
     }
 
     public Command<A> addArg(String arg) {
-        return addArg(arg.getBytes(Charsets.ASCII));
+        return addArg(arg.getBytes(CharsetUtil.US_ASCII));
     }
 
     public Command<A> addArg(long arg) {

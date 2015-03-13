@@ -1,6 +1,6 @@
 package com.github.dryangkun.aedis.protocol;
 
-import com.github.dryangkun.aedis.Charsets;
+import io.netty.util.CharsetUtil;
 
 public enum CommandType {
     // Connection
@@ -55,6 +55,6 @@ public enum CommandType {
     public byte[] bytes;
 
     private CommandType() {
-        bytes = name().getBytes(Charsets.ASCII);
+        bytes = name().getBytes(CharsetUtil.US_ASCII);
     }
 }

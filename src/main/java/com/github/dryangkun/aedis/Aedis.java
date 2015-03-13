@@ -5,6 +5,7 @@ import com.github.dryangkun.aedis.protocol.output.*;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.util.concurrent.ScheduledFuture;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
@@ -25,13 +26,16 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
             final Channel channel = future.channel();
-            if (!closed()) channel.eventLoop().schedule(new Runnable() {
-                @Override
-                public void run() {
-                    LOG.debug("reconnect - " + channel);
-                    connect();
-                }
-            }, options.getReconnect_interval_ms(), TimeUnit.MILLISECONDS);
+            if (!closed()) {
+                channel.eventLoop().schedule(new Runnable() {
+                    @Override
+                    public void run() {
+                        LOG.info("reconnecting - " + channel);
+                        reconnect();
+                        LOG.info("reconnected - " + channel);
+                    }
+                }, options.getReconnect_interval_ms(), TimeUnit.MILLISECONDS);
+            }
         }
     }
 
@@ -54,7 +58,7 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
                     @Override
                     protected void initChannel(SocketChannel ch) throws Exception {
                         ChannelPipeline pipeline = ch.pipeline();
-                        pipeline.addLast(Aedis.this, new CommandHandler(queue), CommandEncoder.INSTANCE);
+                        pipeline.addLast(Aedis.this, new CommandReceiver(queue), CommandEncoder.INSTANCE);
                     }
                 });
     }
@@ -76,8 +80,29 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
                         //ignore
                     }
                 } catch (Throwable e) {
-                    LOG.error("connect fail", e);
+                    LOG.error("connect fail - " + e.getMessage());
+                } finally {
+                    connectLatch = null;
                 }
+            }
+        }
+    }
+
+    private void reconnect() {
+        if (!closed()) synchronized (this) {
+            if (!closed()) {
+                connectLatch = null;
+                ChannelFuture future = bootstrap.connect();
+                future.addListener(new ChannelFutureListener() {
+                    @Override
+                    public void operationComplete(ChannelFuture future) throws Exception {
+                        if (!future.isSuccess()) {
+                            Throwable e = future.cause();
+                            LOG.error("reconnect fail - " + e.getMessage());
+                        }
+                    }
+                });
+                future.channel().closeFuture().addListener(new Reconnect());
             }
         }
     }
@@ -141,12 +166,13 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
     private void dispatch0(final Command command, final Channel channel) {
         command.setQueue(queue);
         channel.writeAndFlush(command, channel.voidPromise());
-        channel.eventLoop().schedule(new Runnable() {
+        ScheduledFuture future = channel.eventLoop().schedule(new Runnable() {
             @Override
             public void run() {
                 command.tryTimeout();
             }
         }, options.getTimeout_ms(), TimeUnit.MILLISECONDS);
+        future.cancel(false);
     }
 
     @Override
@@ -197,14 +223,14 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
                     else {
                         channel.close();
                     }
-                    connectLatch.countDown();
+                    if (connectLatch != null) connectLatch.countDown();
                 }
             }, new StatusOutput(), auth.getBytes());
             dispatch0(command, channel);
         }
         else {
             this.channel = channel;
-            connectLatch.countDown();
+            if (connectLatch != null) connectLatch.countDown();
         }
     }
 
