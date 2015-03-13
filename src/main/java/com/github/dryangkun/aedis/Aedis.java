@@ -175,12 +175,7 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
         ChannelPipeline pipeline = channel.pipeline();
         CommandHandler handler = (CommandHandler) pipeline.get("handler");
         if (handler.write(command, options.getTimeout_ms())) {
-            channel.eventLoop().schedule(new Runnable() {
-                @Override
-                public void run() {
-                    command.tryTimeout();
-                }
-            }, options.getTimeout_ms(), TimeUnit.MILLISECONDS);
+            command.setTimeoutTask(channel.eventLoop(), options.getTimeout_ms());
             handler.trigger(pipeline);
         }
     }

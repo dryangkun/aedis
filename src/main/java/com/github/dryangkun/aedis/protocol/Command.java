@@ -2,12 +2,15 @@ package com.github.dryangkun.aedis.protocol;
 
 import com.github.dryangkun.aedis.protocol.output.Output;
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.EventLoop;
 import io.netty.util.CharsetUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Created by dryangkun on 15/3/1.
@@ -37,6 +40,7 @@ public class Command<A extends Output> {
     private List<byte[]> argsList;
     private int argsByteSize;
 
+    private volatile ScheduledFuture scheduledFuture;
     private volatile Object result = null;
 
     public Command() {
@@ -134,6 +138,16 @@ public class Command<A extends Output> {
         return 1 + getIntStrLength(argsList.size()) + 2 + argsByteSize + 5 * argsList.size();
     }
 
+    public void setTimeoutTask(EventLoop executor, int timeout_ms) {
+        scheduledFuture = executor.schedule(new Runnable() {
+            @Override
+            public void run() {
+                scheduledFuture = null;
+                tryTimeout();
+            }
+        }, timeout_ms, TimeUnit.MILLISECONDS);
+    }
+
     public A get() {
         return output;
     }
@@ -171,6 +185,10 @@ public class Command<A extends Output> {
         if (this.result == null) {
             synchronized (this) {
                 if (this.result == null) {
+                    if (result != TIMEOUT && scheduledFuture != null) {
+                        scheduledFuture.cancel(false);
+                    }
+
                     argsList = null;
                     this.result = result;
                     return true;
