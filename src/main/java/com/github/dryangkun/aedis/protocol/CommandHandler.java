@@ -1,11 +1,11 @@
 package com.github.dryangkun.aedis.protocol;
 
-import com.github.dryangkun.aedis.Charsets;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
+import io.netty.util.CharsetUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
@@ -57,7 +57,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         ByteBuf buf = (ByteBuf) msg;
         if (LOG.isDebugEnabled()) {
-            LOG.debug("read - " + buf.toString(Charsets.ASCII));
+            LOG.debug("read - " + buf.toString(CharsetUtil.US_ASCII));
         }
         if (!buf.isReadable()) {
             return;

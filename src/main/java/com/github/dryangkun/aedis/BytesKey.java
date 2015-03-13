@@ -1,5 +1,7 @@
 package com.github.dryangkun.aedis;
 
+import io.netty.util.CharsetUtil;
+
 import java.util.Arrays;
 
 /**
@@ -36,6 +38,6 @@ public class BytesKey {
     }
 
     public static BytesKey createKey(String key) {
-        return new BytesKey(key.getBytes(Charsets.ASCII));
+        return new BytesKey(key.getBytes(CharsetUtil.US_ASCII));
     }
 }

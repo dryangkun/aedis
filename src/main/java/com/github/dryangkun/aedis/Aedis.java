@@ -1,7 +1,10 @@
 package com.github.dryangkun.aedis;
 
-import com.github.dryangkun.aedis.protocol.*;
-import com.github.dryangkun.aedis.protocol.output.*;
+import com.github.dryangkun.aedis.protocol.Command;
+import com.github.dryangkun.aedis.protocol.CommandHandler;
+import com.github.dryangkun.aedis.protocol.CommandListener;
+import com.github.dryangkun.aedis.protocol.CommandType;
+import com.github.dryangkun.aedis.protocol.output.StatusOutput;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
@@ -10,7 +13,6 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
