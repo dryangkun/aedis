@@ -67,6 +67,7 @@ ListenerCombiner combiner = new ListenerCombiner() {
 pipeline.set(combiner.newListener(StatusOutput.class), "abc".getBytes(), "xxoo".getBytes());
 pipeline.get(combiner.newListener(ByteArrayOutput.class), "abc".getBytes());
 pipeline.syncCommands();
+```
 
 # Notice
 
