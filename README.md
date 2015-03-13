@@ -51,6 +51,7 @@ bootstrap.setHostAndPort("localhost", 6379);
 
 AedisGroup aedis = bootstrap.newAedisGroup(80);
 //same with Aedis
+```
 
 # Pipeline Usage
 send multi commands with one flush operation
