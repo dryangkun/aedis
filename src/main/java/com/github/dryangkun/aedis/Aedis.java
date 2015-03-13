@@ -3,6 +3,7 @@ package com.github.dryangkun.aedis;
 import com.github.dryangkun.aedis.protocol.*;
 import com.github.dryangkun.aedis.protocol.output.*;
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.util.internal.logging.InternalLogger;
@@ -12,6 +13,8 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Created by dryangkun on 15/3/1.
@@ -38,6 +41,7 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
     private final Bootstrap bootstrap;
     private final AedisBootstrap.Options options;
     private final LinkedBlockingQueue<Command> queue;
+    private final Lock wlock = new ReentrantLock();
 
     private volatile boolean closed = false;
     private volatile  Channel channel;
@@ -54,7 +58,7 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
                     @Override
                     protected void initChannel(SocketChannel ch) throws Exception {
                         ChannelPipeline pipeline = ch.pipeline();
-                        pipeline.addLast(Aedis.this, new CommandHandler(queue), CommandEncoder.INSTANCE);
+                        pipeline.addLast(Aedis.this, new CommandHandler(queue));
                     }
                 });
     }
@@ -104,49 +108,98 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
     }
 
     public void dispatch(final List<Command> commands) {
-        final Channel channel = this.channel;
-        if (channel != null && channel.isActive()) {
-            for (Command command : commands) {
-                command.setQueue(queue);
-                channel.write(command, channel.voidPromise());
+        boolean inactive = true;
+        if (channel != null) {
+            boolean trylock = false;
+            try {
+                trylock = wlock.tryLock(options.getTimeout_ms(), TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                //ignore
             }
-            channel.flush();
-            channel.eventLoop().schedule(new Runnable() {
-                @Override
-                public void run() {
+
+            if (trylock) {
+                if (channel != null && channel.isActive()) {
+                    inactive = false;
+                    boolean flushed = false;
                     for (Command command : commands) {
-                        command.tryTimeout();
+                        if (queue.offer(command)) {
+                            ByteBuf buf = channel.alloc().buffer(command.getByteBufCapacity());
+                            command.encode(buf);
+                            channel.writeAndFlush(buf, channel.voidPromise());
+                            flushed = true;
+                        }
+                        else {
+                            command.tryQueuefull();
+                        }
+                    }
+
+                    if (flushed) {
+                        channel.flush();
+                        channel.eventLoop().schedule(new Runnable() {
+                            @Override
+                            public void run() {
+                                for (Command command : commands) {
+                                    command.tryTimeout();
+                                }
+                            }
+                        }, options.getTimeout_ms(), TimeUnit.MILLISECONDS);
                     }
                 }
-            }, options.getTimeout_ms(), TimeUnit.MILLISECONDS);
+                wlock.unlock();
+            }
+            else {
+                for (Command command : commands) {
+                    command.tryTimeout();
+                }
+            }
         }
-        else {
+        if (inactive)
             for (Command command : commands) {
                 command.tryInactive();
             }
-        }
     }
 
     @Override
     public void dispatch(final Command command) {
-        final Channel channel = this.channel;
-        if (channel != null && channel.isActive()) {
-            dispatch0(command, channel);
+        boolean inactive = true;
+        if (channel != null) {
+            boolean trylock = false;
+            try {
+                trylock = wlock.tryLock(options.getTimeout_ms(), TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                //ignore
+            }
+
+            if (trylock) {
+                if (channel != null && channel.isActive()) {
+                    inactive = false;
+                    dispatch0(command, channel);
+                }
+                wlock.unlock();
+            }
+            else {
+                command.tryTimeout();
+            }
         }
-        else {
+        if (inactive)
             command.tryInactive();
-        }
     }
 
     private void dispatch0(final Command command, final Channel channel) {
-        command.setQueue(queue);
-        channel.writeAndFlush(command, channel.voidPromise());
-        channel.eventLoop().schedule(new Runnable() {
-            @Override
-            public void run() {
-                command.tryTimeout();
-            }
-        }, options.getTimeout_ms(), TimeUnit.MILLISECONDS);
+        if (queue.offer(command)) {
+            ByteBuf buf = channel.alloc().buffer(command.getByteBufCapacity());
+            command.encode(buf);
+            channel.writeAndFlush(buf, channel.voidPromise());
+            channel.eventLoop().schedule(new Runnable() {
+                @Override
+                public void run() {
+                    command.tryTimeout();
+                }
+            }, options.getTimeout_ms(), TimeUnit.MILLISECONDS);
+        }
+        else {
+            command.tryQueuefull();
+        }
     }
 
     @Override
@@ -166,16 +219,19 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
 
     @Override
     public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
+        wlock.lock();
         Command command;
         while ((command = queue.poll()) != null) {
             command.tryInactive();
         }
+        wlock.unlock();
     }
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         String auth = options.getAuth();
         final Channel channel = ctx.channel();
+        wlock.lock();
         if (auth != null && auth.length() > 0) {
             Command<StatusOutput> command = new Command<StatusOutput>(CommandType.AUTH, new CommandListener<StatusOutput>() {
                 @Override
@@ -191,6 +247,7 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
                         }
                     }
 
+                    wlock.lock();
                     if (success) {
                         Aedis.this.channel = channel;
                     }
@@ -198,6 +255,7 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
                         channel.close();
                     }
                     connectLatch.countDown();
+                    wlock.unlock();
                 }
             }, new StatusOutput(), auth.getBytes());
             dispatch0(command, channel);
@@ -206,11 +264,14 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
             this.channel = channel;
             connectLatch.countDown();
         }
+        wlock.unlock();
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        wlock.lock();
         channel = null;
+        wlock.unlock();
     }
 
     @Override
