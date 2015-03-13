@@ -74,7 +74,7 @@ pipeline.syncCommands();
 ## prevent out of memory
 you can call AedisBootstrap.setCommand_queue_capacity to the write queue size
 and the read queue size. if write too much and redis server response to slow,
-then the command listener will call with cause in timeout(Command.isTimeoutFailure() == true)
+then the command listener will call with cause in queuefull(Command.isQueuefullFailure() == true)
 
 ## more options to netty Bootstrap
 you can call AedisBootstrap.getBootstrap() to get the instance, and then set/add options
