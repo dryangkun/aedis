@@ -185,6 +185,7 @@ public class Command<A extends Output> {
         if (this.result == null) {
             synchronized (this) {
                 if (this.result == null) {
+                    final ScheduledFuture scheduledFuture = this.scheduledFuture;
                     if (result != TIMEOUT && scheduledFuture != null) {
                         scheduledFuture.cancel(false);
                     }

@@ -139,6 +139,8 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
         Command command;
         boolean flushed = false;
         while (channel.isWritable() && (command = writeQueue.poll()) != null) {
+            if (command.isDone())
+                continue;
             if (readQueue.offer(command)) {
                 ByteBuf buf = channel.alloc().buffer(command.getByteBufCapacity());
                 command.encode(buf);
@@ -151,5 +153,11 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
         }
         if (flushed)
             ctx.flush();
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        LOG.error("exceptionCaught - " + cause.getMessage(), cause);
+        ctx.close();
     }
 }

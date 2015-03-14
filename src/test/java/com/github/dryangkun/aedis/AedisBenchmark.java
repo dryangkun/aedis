@@ -17,18 +17,19 @@ public class AedisBenchmark {
     public static void main(String[] args) throws Exception {
         AedisBootstrap bootstrap = new AedisBootstrap(new NioEventLoopGroup());
         bootstrap.setHostAndPort("localhost", 6379)
-                .setTimeout_ms(10000);
+                .setTimeout_ms(15)
+                .setCommand_queue_capacity(65535 * 100);
 
-        int count = 2000000;
-        final AedisGroup aedis = bootstrap.newAedisGroup(80);
+        int count = 50000;
+        final Aedis aedis = bootstrap.newAedis();
         final CountDownLatch latch = new CountDownLatch(1);
         final AtomicInteger increment = new AtomicInteger(count);
 
         final AtomicLong timeoutIncrement = new AtomicLong();
         final AtomicLong inactiveIncrement = new AtomicLong();
         final AtomicLong queuefullIncrement = new AtomicLong();
-        final AtomicLong unwritableIncrement = new AtomicLong();
         final AtomicLong successIncrement = new AtomicLong();
+        final byte[] value = "value".getBytes();
 
         long s = System.nanoTime();
         for (int i = 0; i < count; i++) {
@@ -52,7 +53,7 @@ public class AedisBenchmark {
                         latch.countDown();
                     }
                 }
-            }, "xxoo".getBytes(), "1".getBytes());
+            }, ("" + i).getBytes(), value);
         }
 
         latch.await();
@@ -65,7 +66,6 @@ public class AedisBenchmark {
         System.out.println("timeout : " + timeoutIncrement.get());
         System.out.println("inactive : " + inactiveIncrement.get());
         System.out.println("queuefull : " + queuefullIncrement.get());
-        System.out.println("unwritable : " + unwritableIncrement.get());
 
         aedis.close();
         bootstrap.getGroup().shutdownGracefully();

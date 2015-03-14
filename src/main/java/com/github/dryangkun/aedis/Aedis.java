@@ -265,8 +265,7 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        LOG.error("exceptionCaught - " + cause.getMessage());
-        ctx.close();
+        ctx.fireExceptionCaught(cause);
     }
 
     @Override

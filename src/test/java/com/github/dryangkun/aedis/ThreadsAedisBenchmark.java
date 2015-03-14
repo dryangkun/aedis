@@ -21,13 +21,13 @@ public class ThreadsAedisBenchmark {
     public static void main(String[] args) throws Exception {
         AedisBootstrap bootstrap = new AedisBootstrap(new NioEventLoopGroup());
         bootstrap.setHostAndPort("localhost", 6379)
-                .setTimeout_ms(10000)
+                .setTimeout_ms(15)
                 .setCommand_queue_capacity(65535 * 4);
 
         final AedisGroup aedis = bootstrap.newAedisGroup(80);
         System.out.println("start...");
         final int threads = 4;
-        final int count = 500000;
+        final int count = 10000;
 
         final CountDownLatch latch = new CountDownLatch(1);
         final AtomicLong timeoutIncrement = new AtomicLong();
@@ -103,8 +103,8 @@ public class ThreadsAedisBenchmark {
 
         double time = (System.nanoTime() - s) / 1000.0 / 1000;
         System.out.println("total time : " + time);
-        System.out.println("time : " + (time / (count * threads)));
-        System.out.println("per : " + (1000.0 * (count * threads) / time));
+        System.out.println("time : " + (time / (count * threads * 2)));
+        System.out.println("per : " + (1000.0 * (count * threads * 2) / time));
         System.out.println("success : " + successIncrement.get());
         System.out.println("timeout : " + timeoutIncrement.get());
         System.out.println("inactive : " + inactiveIncrement.get());
