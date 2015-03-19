@@ -139,13 +139,15 @@ public class Command<A extends Output> {
     }
 
     public void setTimeoutTask(EventLoop executor, int timeout_ms) {
-        scheduledFuture = executor.schedule(new Runnable() {
-            @Override
-            public void run() {
-                scheduledFuture = null;
-                tryTimeout();
-            }
-        }, timeout_ms, TimeUnit.MILLISECONDS);
+        if (timeout_ms > 0) {
+            scheduledFuture = executor.schedule(new Runnable() {
+                @Override
+                public void run() {
+                    scheduledFuture = null;
+                    tryTimeout();
+                }
+            }, timeout_ms, TimeUnit.MILLISECONDS);
+        }
     }
 
     public A get() {

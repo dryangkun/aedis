@@ -164,18 +164,18 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
     public void dispatch(final Command command) {
         final Channel channel = this.channel;
         if (channel != null && channel.isActive()) {
-            dispatch0(command, channel);
+            dispatch0(command, channel, options.getTimeout_ms());
         }
         else {
             command.tryInactive();
         }
     }
 
-    private void dispatch0(final Command command, final Channel channel) {
+    private void dispatch0(final Command command, final Channel channel, int timeout_ms) {
         ChannelPipeline pipeline = channel.pipeline();
         CommandHandler handler = (CommandHandler) pipeline.get("handler");
-        if (handler.write(command, options.getTimeout_ms())) {
-            command.setTimeoutTask(channel.eventLoop(), options.getTimeout_ms());
+        if (handler.write(command, timeout_ms)) {
+            command.setTimeoutTask(channel.eventLoop(), timeout_ms);
             handler.trigger(pipeline);
         }
     }
@@ -229,7 +229,7 @@ public class Aedis extends AedisBase implements IClosable, IPipeline, ChannelInb
                     if (connectLatch != null) connectLatch.countDown();
                 }
             }, new StatusOutput(), auth.getBytes());
-            dispatch0(command, channel);
+            dispatch0(command, channel, options.getConnect_timeout_ms());
         }
         else {
             this.channel = channel;

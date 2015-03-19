@@ -127,14 +127,14 @@ public class AedisBootstrap {
     }
 
     public AedisBootstrap setTimeout_ms(int timeout_ms) {
-        if (timeout_ms <= 0) {
-            throw new IllegalArgumentException("timeout_ms <= 0:" + timeout_ms);
-        }
         options.timeout_ms = timeout_ms;
         return this;
     }
 
     public AedisBootstrap setConnect_timeout_ms(int connect_timeout_ms) {
+        if (connect_timeout_ms <= 0) {
+            throw new IllegalArgumentException("connect_timeout_ms <= 0:" + connect_timeout_ms);
+        }
         options.connect_timeout_ms = connect_timeout_ms;
         return this;
     }

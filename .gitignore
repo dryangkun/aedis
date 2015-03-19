@@ -2,3 +2,4 @@
 .idea/libraries/*
 *.iml
 target/*
+benchmark/*

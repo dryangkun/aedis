@@ -92,7 +92,13 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
     public boolean write(final Command command, int timeout_ms) {
         boolean success = false;
         try {
-            success = writeQueue.offer(command, timeout_ms, TimeUnit.MILLISECONDS);
+            if (timeout_ms > 0) {
+                success = writeQueue.offer(command, timeout_ms, TimeUnit.MILLISECONDS);
+            }
+            else {
+                writeQueue.put(command);
+                success = true;
+            }
         } catch (InterruptedException e) {
             //ignore
         }
