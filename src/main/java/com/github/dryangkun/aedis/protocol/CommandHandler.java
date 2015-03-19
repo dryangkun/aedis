@@ -11,6 +11,7 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Created by dryangkun on 15/3/1.
@@ -25,7 +26,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
     private ByteBuf buffer;
 
     private final LinkedBlockingQueue<Command> writeQueue;
-    private volatile boolean triggered = false;
+    private final AtomicBoolean triggered = new AtomicBoolean(false);
 
     public CommandHandler(int capacity) {
         readQueue = new LinkedBlockingQueue<Command>(capacity);
@@ -102,19 +103,14 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
     }
 
     public void trigger(ChannelPipeline pipeline) {
-        if (!triggered) {
-            synchronized (this) {
-                if (!triggered) {
-                    triggered = true;
-                    pipeline.fireUserEventTriggered(EVENT);
-                }
-            }
+        if (triggered.compareAndSet(false, true)) {
+            pipeline.fireUserEventTriggered(EVENT);
         }
     }
 
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-        triggered = false;
+        triggered.set(false);
         Channel channel = ctx.channel();
         Command command;
         if (channel.isActive()) {
