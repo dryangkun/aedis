@@ -2,6 +2,7 @@
 async redis client on netty
 
 # Features
+- jdk1.6+
 - high perfomance
 - asynchronous
 - thread safe

@@ -9,7 +9,7 @@ import io.netty.util.CharsetUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -21,16 +21,16 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
     private static final InternalLogger LOG = InternalLoggerFactory.getInstance(CommandHandler.class);
     private static final Object EVENT = new Object();
 
-    private final LinkedBlockingQueue<Command> readQueue;
+    private final ArrayBlockingQueue<Command> readQueue;
     private final CommandParser parser = new CommandParser();
     private ByteBuf buffer;
 
-    private final LinkedBlockingQueue<Command> writeQueue;
+    private final ArrayBlockingQueue<Command> writeQueue;
     private final AtomicBoolean triggered = new AtomicBoolean(false);
 
     public CommandHandler(int capacity) {
-        readQueue = new LinkedBlockingQueue<Command>(capacity);
-        writeQueue = new LinkedBlockingQueue<Command>(capacity);
+        readQueue = new ArrayBlockingQueue<Command>(capacity);
+        writeQueue = new ArrayBlockingQueue<Command>(capacity);
     }
 
     @Override
